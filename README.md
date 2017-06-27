@@ -4,8 +4,7 @@ mfdl
 About
 -----
 mfdl (mangafox download script) is a mangafox scraper. It uses BeautifulSoup,
-re, zipfile and zlib. It should work on basically any Unix-like, not guaranteed
-on Windows. Might not work if you're using a case-insensitive file system.
+re, zipfile and zlib. It should work on basically any Unix-like and Windows system. Might not work if you're using a case-insensitive file system.
 
 Usage
 -----

@@ -15,16 +15,13 @@ try:
 except ImportError:
     from BeautifulSoup import BeautifulSoup
 from contextlib import closing
-try:
-	from collections import OrderedDict
-except ImportError:
-	from ordereddict import OrderedDict
+from collections import OrderedDict
 from itertools import islice
 if sys.version_info[0] == 3:
     from functools import reduce
     from urllib.request import urlopen, urlretrieve
-    OrderedDict.iteritems = OrderedDict.items
-    OrderedDict.itervalues = OrderedDict.values
+    # OrderedDict.iteritems = OrderedDict.items
+    # OrderedDict.itervalues = OrderedDict.values
 elif sys.version_info[0] == 2:
     from urllib import urlopen, urlretrieve
 else:
@@ -48,22 +45,28 @@ def get_page_soup(url):
 
 def get_chapter_urls(manga_name):
     """Get the chapter list for a manga"""
-    replace = lambda s, k: s.replace(k, '_')
-    manga_url = reduce(replace, [' ', '-'], manga_name.lower())
-    url = '{0}manga/{1}'.format(URL_BASE, manga_url)
-    soup = get_page_soup(url)
-    manga_does_not_exist = soup.find('form', {'id': 'searchform'})
-    if manga_does_not_exist:
-        search_sort_options = 'sort=views&order=za'
-        url = '{0}/search.php?name={1}&{2}'.format(URL_BASE,
-                                                   manga_url,
-                                                   search_sort_options)
+    if not manga_name.startswith('mangafox.me/') and not manga_name.startswith('http://mangafox.me/'):
+        replace = lambda s, k: s.replace(k, '_')
+        manga_url = reduce(replace, [' ', '-', '.', '@'], manga_name.lower())
+        manga_url = re.sub(r'\_{2,}', '_', manga_url)
+        url = '{0}manga/{1}'.format(URL_BASE, manga_url)
         soup = get_page_soup(url)
-        results = soup.findAll('a', {'class': 'series_preview'})
-        error_text = 'Error: Manga \'{0}\' does not exist'.format(manga_name)
-        error_text += '\nDid you meant one of the following?\n  * '
-        error_text += '\n  * '.join([manga.text for manga in results][:10])
-        sys.exit(error_text)
+        manga_does_not_exist = soup.find('form', {'id': 'searchform'})
+        if manga_does_not_exist:
+            search_sort_options = 'sort=views&order=za'
+            url = '{0}/search.php?name={1}&{2}'.format(URL_BASE,
+                                                       manga_url,
+                                                       search_sort_options)
+            soup = get_page_soup(url)
+            results = soup.findAll('a', {'class': 'series_preview'})
+            error_text = 'Error: Manga \'{0}\' does not exist'.format(manga_name)
+            error_text += '\nDid you meant one of the following?\n  * '
+            error_text += '\n  * '.join([manga.text for manga in results][:10])
+            sys.exit(error_text)
+    else:
+        if not manga_name.startswith('http://'):
+            manga_name = 'http://{0}'.format(manga_name)
+        soup = get_page_soup(manga_name)
     warning = soup.find('div', {'class': 'warning'})
     if warning and 'licensed' in warning.text:
         sys.exit('Error: ' + warning.text)
@@ -71,10 +74,11 @@ def get_chapter_urls(manga_name):
     links = soup.findAll('a', {'class': 'tips'})
     if(len(links) == 0):
         sys.exit('Error: Manga either does not exist or has no chapters')
-    replace_manga_name = re.compile(re.escape(manga_name.replace('_', ' ')),
-                                    re.IGNORECASE)
+    # replace_manga_name = re.compile(re.escape(manga_name.replace('_', ' ')),
+    #                                re.IGNORECASE)
+
     for link in reversed(links):
-        chapters[replace_manga_name.sub('', link.text).strip()] = link['href']
+        chapters[link.text.split(' ')[-1]] = link['href']
     return chapters
 
 
