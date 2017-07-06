@@ -9,64 +9,72 @@ import glob
 import shutil
 import re
 from zipfile import ZipFile
-import zlib
-try:
-    from bs4 import BeautifulSoup
-except ImportError:
-    from BeautifulSoup import BeautifulSoup
+from bs4 import BeautifulSoup
+
 from contextlib import closing
 from collections import OrderedDict
 from itertools import islice
-if sys.version_info[0] == 3:
-    from functools import reduce
-    from urllib.request import urlopen, urlretrieve
-    # OrderedDict.iteritems = OrderedDict.items
-    # OrderedDict.itervalues = OrderedDict.values
-elif sys.version_info[0] == 2:
-    from urllib import urlopen, urlretrieve
-else:
-    sys.exit('Python version not supported')
+import urllib2
 
 URL_BASE = "http://mangafox.me/"
 MAKE_CBZ = True
 DOWNLOAD_TO = "./"
+HEADERS = {
+    "Accept-Language": "en-US,en;q=0.5",
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; WOW64; rv:40.0) Gecko/20100101 Firefox/40.0",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "Referer": "http://thewebsite.com",
+    "Connection": "keep-alive"
+}
 
+# Get html source of url
+def gethtml(url):
+    return urllib2.urlopen(
+        urllib2.Request(url,
+                        headers=HEADERS)
+    ).read()
+
+def download(url,filename):
+    u = urllib2.urlopen(urllib2.Request(url,
+                                        headers=HEADERS))
+    f = open(filename, 'wb')
+    meta = u.info()
+    file_size = int(meta.getheaders("Content-Length")[0])
+    print ("Downloading: %s Bytes: %s" % (filename, file_size))
+
+    file_size_dl = 0
+    block_sz = 8192
+    while True:
+        buffer = u.read(block_sz)
+        if not buffer:
+            break
+        file_size_dl += len(buffer)
+        f.write(buffer)
+    f.close()
 
 def get_page_soup(url):
     """Download a page and return a BeautifulSoup object of the html"""
-    with closing(urlopen(url)) as raw_data:
-        data = raw_data.read()
-        try:
-            html_file = zlib.decompress(data,32 + zlib.MAX_WBITS)
-        except zlib.error:
-            html_file = data
-        return BeautifulSoup(html_file, 'html.parser')
+    return BeautifulSoup(gethtml(url), 'html.parser')
 
 
 def get_chapter_urls(manga_name):
     """Get the chapter list for a manga"""
-    if not manga_name.startswith('mangafox.me/') and not manga_name.startswith('http://mangafox.me/'):
-        replace = lambda s, k: s.replace(k, '_')
-        manga_url = reduce(replace, [' ', '-', '.', '@'], manga_name.lower())
-        manga_url = re.sub(r'\_{2,}', '_', manga_url)
-        url = '{0}manga/{1}'.format(URL_BASE, manga_url)
+    replace = lambda s, k: s.replace(k, '_')
+    manga_url = reduce(replace, [' ', '-'], manga_name.lower())
+    url = '{0}manga/{1}'.format(URL_BASE, manga_url)
+    soup = get_page_soup(url)
+    manga_does_not_exist = soup.find('form', {'id': 'searchform'})
+    if manga_does_not_exist:
+        search_sort_options = 'sort=views&order=za'
+        url = '{0}/search.php?name={1}&{2}'.format(URL_BASE,
+                                                   manga_url,
+                                                   search_sort_options)
         soup = get_page_soup(url)
-        manga_does_not_exist = soup.find('form', {'id': 'searchform'})
-        if manga_does_not_exist:
-            search_sort_options = 'sort=views&order=za'
-            url = '{0}/search.php?name={1}&{2}'.format(URL_BASE,
-                                                       manga_url,
-                                                       search_sort_options)
-            soup = get_page_soup(url)
-            results = soup.findAll('a', {'class': 'series_preview'})
-            error_text = 'Error: Manga \'{0}\' does not exist'.format(manga_name)
-            error_text += '\nDid you meant one of the following?\n  * '
-            error_text += '\n  * '.join([manga.text for manga in results][:10])
-            sys.exit(error_text)
-    else:
-        if not manga_name.startswith('http://'):
-            manga_name = 'http://{0}'.format(manga_name)
-        soup = get_page_soup(manga_name)
+        results = soup.findAll('a', {'class': 'series_preview'})
+        error_text = 'Error: Manga \'{0}\' does not exist'.format(manga_name)
+        error_text += '\nDid you meant one of the following?\n  * '
+        error_text += '\n  * '.join([manga.text for manga in results][:10])
+        sys.exit(error_text)
     warning = soup.find('div', {'class': 'warning'})
     if warning and 'licensed' in warning.text:
         sys.exit('Error: ' + warning.text)
@@ -74,11 +82,10 @@ def get_chapter_urls(manga_name):
     links = soup.findAll('a', {'class': 'tips'})
     if(len(links) == 0):
         sys.exit('Error: Manga either does not exist or has no chapters')
-    # replace_manga_name = re.compile(re.escape(manga_name.replace('_', ' ')),
-    #                                re.IGNORECASE)
-
+    replace_manga_name = re.compile(re.escape(manga_name.replace('_', ' ')),
+                                    re.IGNORECASE)
     for link in reversed(links):
-        chapters[link.text.split(' ')[-1]] = link['href']
+        chapters[replace_manga_name.sub('', link.text).strip()] = link['href']
     return chapters
 
 
@@ -119,8 +126,7 @@ def download_urls(image_urls, manga_name, chapter_number):
     for i, url in enumerate(image_urls):
         filename = '{dir}{page:03}.jpg'.format(dir=download_dir, page=i)
         print('dl: {0} -> {1}'.format(url, filename))
-        urlretrieve(url, filename)
-
+        download(url=url, filename=filename)
 
 def make_cbz(dirname):
     """Create CBZ files for all JPEG image files in a directory."""
