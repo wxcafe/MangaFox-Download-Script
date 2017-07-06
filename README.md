@@ -1,11 +1,11 @@
 mfdl
 ====
+Download manga from MangaFox using Python2.7
 
 About
 -----
-mfdl (mangafox download script) is a mangafox scraper. It uses BeautifulSoup,
-re, zipfile and zlib. It should work on basically any Unix-like, not guaranteed
-on Windows. Might not work if you're using a case-insensitive file system.
+mfdl (mangafox download script) is a mangafox scraper. It uses bs4,
+re, zipfile and zlib. It should work on basically any Unix-like and Windows system. Might not work if you're using a case-insensitive file system.
 
 Usage
 -----
